@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "464313309975",
+    "project_id": "smartparking-dbfc4",
+    "storage_bucket": "smartparking-dbfc4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:464313309975:android:4a2aad669faed36e087552",
+        "android_client_info": {
+          "package_name": "com.example.parkingsmart"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDEESxp-1KVAPK4BhbglF1R-khWUel6NY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -430,6 +430,23 @@ class SlotsPage extends StatefulWidget {
 }
 
 class _SlotsPageState extends State<SlotsPage> {
+
+  Future<bool> _guardActive(String slotId) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final st = await FirebaseFirestore.instance.collection('userStates').doc(uid).get();
+      final active = st.data()?['activeSlotId'] as String?;
+      if (active != null && active.isNotEmpty && active != slotId) {
+        _toast('Bạn đang giữ $active, hãy trả trước khi thao tác với $slotId');
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return true; // đừng chặn nếu đọc state lỗi; server (rules/transaction) vẫn chặn được
+    }
+  }
+
+
   final svc = SlotService();
   String? email;
 
@@ -537,6 +554,7 @@ class _SlotsPageState extends State<SlotsPage> {
           label: 'Đặt chỗ (RESERVE)',
           icon: Icons.event_available,
           run: () async {
+            if (!await _guardActive(s.id)) return;
             final plate = await _askPlate(context);
             if (plate != null && plate.isNotEmpty) {
               await svc.reserve(s.id, plate);
@@ -572,6 +590,7 @@ class _SlotsPageState extends State<SlotsPage> {
             label: 'Đánh dấu đã đỗ (OCCUPY)',
             icon: Icons.directions_car,
             run: () async {
+              if (!await _guardActive(s.id)) return;
               final plate = await _askPlate(context);
               if (plate != null && plate.isNotEmpty) {
                 await svc.occupy(s.id, plate);

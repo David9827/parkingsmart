@@ -257,7 +257,7 @@ class _TodayRevenue {
 }
 
 /// Biểu đồ cột 5 ngày gần nhất (dữ liệu mock).
-/// Sau này chỉ cần thay `points` bằng dữ liệu từ Firestore.
+
 class _Last5DaysChartFS extends StatelessWidget {
   final FirebaseFirestore fs;
   const _Last5DaysChartFS({required this.fs, super.key});
@@ -472,7 +472,7 @@ class _SlotsPageState extends State<SlotsPage> {
               return GridView.builder(
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 5, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.75,
+                  crossAxisCount: 5, crossAxisSpacing: 1, mainAxisSpacing: 8, childAspectRatio: 0.6,
                 ),
                 itemCount: data.length,
                 itemBuilder: (_, i) {
@@ -537,8 +537,11 @@ class _SlotsPageState extends State<SlotsPage> {
           label: 'Đặt chỗ (RESERVE)',
           icon: Icons.event_available,
           run: () async {
-            await svc.reserve(s.id);
-            _toast('Đã đặt ${s.id}');
+            final plate = await _askPlate(context);
+            if (plate != null && plate.isNotEmpty) {
+              await svc.reserve(s.id, plate);
+              _toast('Đã đặt ${s.id}');
+            }
           },
         ));
         actions.add(_ActionItem(
@@ -797,7 +800,7 @@ class _ReserveCountdownState extends State<_ReserveCountdown> {
     super.initState();
     _ticker = Stream.periodic(const Duration(seconds: 1), (i) => i);
   }
-
+///Timer đếm giờ đợi reset về AVAILABLE
   @override
   Widget build(BuildContext context) {
     final ts = widget.slot.reservedAt; // Timestamp?

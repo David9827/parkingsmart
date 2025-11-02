@@ -77,7 +77,7 @@ class SlotService {
   }
 
   /// ĐẶT chỗ: AVAILABLE -> RESERVED (người đặt = email hiện tại)
-  Future<void> reserve(String slotId) async {
+  Future<void> reserve(String slotId, String plate) async {
     final slotRef = _db.collection('slots').doc(slotId);
     final userRef = _db.collection('userStates').doc(_uid);
     final reservations = _db.collection('reservations');
@@ -96,7 +96,7 @@ class SlotService {
         'accountEmail': _email,
         'status': 'RESERVED',
         'reservedAt': FieldValue.serverTimestamp(),
-        'plate': null,
+        'plate': plate,
         'releasedAt': null,
         'amount': null,
       });
@@ -106,7 +106,7 @@ class SlotService {
         'state': 'RESERVED',
         'reservedBy': _email,
         'reservedAt': FieldValue.serverTimestamp(), // 👈 timer dựa vào đây
-        'plate': null,
+        'plate': plate,
       });
 
       // cập nhật trạng thái user (để rules biết “đang giữ slot nào”)

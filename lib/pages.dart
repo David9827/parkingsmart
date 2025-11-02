@@ -22,6 +22,7 @@ class DashboardPage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: ListView(
         children: [
+
           // ====== THỐNG KÊ SLOT HIỆN THỜI ======
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: slotsStream,
@@ -46,64 +47,163 @@ class DashboardPage extends StatelessWidget {
             },
           ),
           const SizedBox(height: 16),
+// ====== ĐƠN GIÁ (đ/phút) ======
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Text('Đơn giá: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Expanded(
+                    child: StreamBuilder<int?>(
+                      stream: SlotService().pricePerMinuteStream(),
+                      builder: (_, s) {
+                        final ctl = TextEditingController(
+                          text: (s.data ?? 0).toString(),
+                        );
+                        return TextField(
+                          controller: ctl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            labelText: 'VND/phút',
+                            border: OutlineInputBorder(),
+                          ),
+                          onSubmitted: (v) async {
+                            final p = int.tryParse(v.trim()) ?? 0;
+                            await SlotService().setPricePerMinute(p);
+                            ScaffoldMessenger.of(_).showSnackBar(
+                              const SnackBar(content: Text('Đã lưu đơn giá')),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('VND/phút'),
+                ],
+              ),
+            ),
+          ),
 
           // ====== BIỂU ĐỒ 5 NGÀY GẦN NHẤT ======
           const _SectionTitle('Thống kê 5 ngày gần nhất'),
-          _Last5DaysChartFS(fs: fs),   // dùng Firestore, không còn mock
+          _Last5DaysChartFS(fs: fs),   // dùng Firestore
           const SizedBox(height: 16),
 
           // ====== LỊCH SỬ GẦN ĐÂY CỦA CHÍNH USER ======
           const _SectionTitle('Gần đây'),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            // Lịch sử các phiên đã kết thúc của chính user, sắp theo thời điểm rời bãi
             stream: fs.collection('reservations')
                 .where('accountEmail', isEqualTo: auth.currentUser?.email)
-                .orderBy('reservedAt', descending: true)
+                .where('status', isEqualTo: 'RELEASED')
+                .orderBy('releasedAt', descending: true) // 👈 sắp theo thời điểm rời bãi
                 .limit(5)
                 .snapshots(),
             builder: (_, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: Padding(
-                  padding: EdgeInsets.all(8), child: CircularProgressIndicator(),
-                ));
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
               }
+
+              if (snap.hasError) {
+                // HIỂN THỊ LỖI để biết có phải thiếu index/rules hay không
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.error_outline),
+                    title: const Text('Không tải được lịch sử'),
+                    subtitle: Text('${snap.error}'),
+                  ),
+                );
+              }
+
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {
-                return Card(child: ListTile(
-                  leading: const Icon(Icons.info_outline),
-                  title: const Text('Chưa có đặt chỗ nào'),
-                ));
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('Chưa có phiên đỗ xe nào'),
+                    subtitle: const Text('Khi bạn trả chuồng (FREE), phiên sẽ hiển thị ở đây'),
+                  ),
+                );
               }
+
               return Column(
                 children: docs.map((d) {
                   final m = d.data();
                   final slotId = m['slotId'] ?? '—';
                   final plate  = m['plate'] ?? '—';
-                  final status = m['status'] ?? '—';
-                  final ts = (m['reservedAt'] as Timestamp?)?.toDate();
-                  final time = ts != null ? DateFormat('HH:mm').format(ts.toLocal()) : '—';
-                  final amount = m['amount'];
-                  final subtitle = amount is int
-                      ? '$plate • ${_formatVnd(amount)}'
+                  final amount = (m['amount'] is int) ? m['amount'] as int : 0;
+                  final releasedAt = (m['releasedAt'] as Timestamp?)?.toDate();
+                  final time = releasedAt != null
+                      ? DateFormat('HH:mm dd/MM').format(releasedAt.toLocal())
+                      : '—';
+
+                  final subtitle = amount > 0
+                      ? '$plate • ${DashboardPage._formatVnd(amount)}'
                       : plate;
+
                   return Card(
                     child: ListTile(
                       leading: const Icon(Icons.local_parking),
-                      title: Text('$slotId • $status'),
-                      subtitle: Text(subtitle),
-                      trailing: Text(time, style: Theme.of(context).textTheme.labelLarge),
+                      title: Text('$slotId • ĐÃ RỜI BÃI'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Dòng 1: biển số + số tiền
+                          Text(
+                            amount is int ? '$plate • ${DashboardPage._formatVnd(amount)}' : plate,
+                          ),
+                          // Dòng 2: giờ bắt đầu đỗ – giờ rời bãi (+ thời lượng phút)
+                          Builder(builder: (_) {
+                            final occupiedAt = (m['occupiedAt'] as Timestamp?)?.toDate();
+                            final releasedAt = (m['releasedAt'] as Timestamp?)?.toDate();
+
+                            String range;
+                            String dur = '';
+                            if (occupiedAt != null && releasedAt != null) {
+                              final start = _fmtHM(occupiedAt);
+                              final end   = _fmtHM(releasedAt);
+                              final minutes = ((releasedAt.difference(occupiedAt).inSeconds + 59) ~/ 60);
+                              range = '$start–$end';
+                              dur = ' • $minutes phút';
+                            } else if (occupiedAt != null) {
+                              range = '${_fmtHM(occupiedAt)}–…';
+                            } else {
+                              range = '—';
+                            }
+                            return Text('$range$dur',
+                                style: Theme.of(context).textTheme.bodySmall);
+                          }),
+                        ],
+                      ),
+                      trailing: Text(
+                        // Hiển thị ngày của releasedAt cho gọn
+                        _fmtDay((m['releasedAt'] as Timestamp?)?.toDate()),
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
                     ),
                   );
                 }).toList(),
               );
             },
           ),
+
         ],
       ),
     );
   }
 
   // ---- helpers ----
-
+  String _fmtHM(DateTime dt) => DateFormat('HH:mm').format(dt.toLocal());
+  String _fmtDay(DateTime? dt) =>
+      dt == null ? '—' : DateFormat('dd/MM').format(dt.toLocal());
   _SlotCounts _countSlots(QuerySnapshot<Map<String, dynamic>>? snap) {
     int a = 0, r = 0, o = 0;
     if (snap != null) {

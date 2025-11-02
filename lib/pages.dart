@@ -372,7 +372,7 @@ class _SlotsPageState extends State<SlotsPage> {
               return GridView.builder(
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 5, crossAxisSpacing: 8, mainAxisSpacing: 8,
+                  crossAxisCount: 5, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.75,
                 ),
                 itemCount: data.length,
                 itemBuilder: (_, i) {
@@ -393,6 +393,9 @@ class _SlotsPageState extends State<SlotsPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            if (s.state == 'RESERVED' && s.reservedAt != null)
+                              _ReserveCountdown(slot: s, svc: svc),
+
                             Text(s.id,
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                             if (s.state == 'OCCUPIED' && (s.plate?.isNotEmpty ?? false)) ...[
@@ -675,3 +678,68 @@ class _LabeledField extends StatelessWidget {
     );
   }
 }
+
+class _ReserveCountdown extends StatefulWidget {
+  final Slot slot;
+  final SlotService svc;
+  const _ReserveCountdown({required this.slot, required this.svc});
+
+  @override
+  State<_ReserveCountdown> createState() => _ReserveCountdownState();
+}
+
+class _ReserveCountdownState extends State<_ReserveCountdown> {
+  late final Stream<int> _ticker;
+  bool _expireCalled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Stream.periodic(const Duration(seconds: 1), (i) => i);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = widget.slot.reservedAt; // Timestamp?
+    if (ts == null) return const SizedBox.shrink();
+
+    final start = ts.toDate();
+    final deadline = start.add(const Duration(minutes: 10));
+
+    return StreamBuilder<int>(
+      stream: _ticker,
+      builder: (_, __) {
+        final remain = deadline.difference(DateTime.now()).inSeconds;
+
+        if (remain <= 0 && !_expireCalled) {
+          _expireCalled = true;
+          widget.svc.expireIfTimedOut(widget.slot.id).catchError((_) {});
+        }
+
+        final text = remain > 0 ? _fmt(remain) : '00:00';
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              text,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _fmt(int secs) {
+    final mm = (secs ~/ 60).toString().padLeft(2, '0');
+    final ss = (secs % 60).toString().padLeft(2, '0');
+    return '$mm:$ss';
+  }
+}
+

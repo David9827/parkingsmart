@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:parkingsmart/pages.dart';
+
+
 class Slot {
   final String id;
   final String state;      // "AVAILABLE" | "RESERVED" | "OCCUPIED"
@@ -132,7 +135,7 @@ class SlotService {
       final m = slotSnap.data() as Map<String, dynamic>;
       final u = userSnap.data() as Map<String, dynamic>;
 
-      if (m['state'] != 'RESERVED' || m['reservedBy'] != _email) {
+      if (m['state'] != 'RESERVED' || m['reservedBy'] != _email){
         throw Exception('Bạn không phải người đặt chuồng này');
       }
       if (u['activeSlotId'] != slotId) {
@@ -235,8 +238,98 @@ class SlotService {
   Future<void> free(String slotId) async {
     final slotRef = _db.collection('slots').doc(slotId);
     final userRef = _db.collection('userStates').doc(_uid);
+    if (!isAdmin) {
+      throw Exception('Bạn không có quyền chỉnh sửa');
+    }
+    // ADMIN: đường đi riêng, không phụ thuộc userStates của admin
+    if (isAdmin) {
+      final cfgSnap = await _cfgRef.get();
+      final price = (cfgSnap.data()?['pricePerMinute'] as int?) ?? 0;
 
-    await _db.runTransaction((tx) async {
+      // 1) đọc slot
+      final slotSnap = await slotRef.get();
+      if (!slotSnap.exists) {
+        throw Exception('Chuồng không tồn tại');
+      }
+      final slot = slotSnap.data() as Map<String, dynamic>;
+      if (slot['state'] != 'OCCUPIED') {
+        throw Exception('Chuồng chưa ở trạng thái OCCUPIED');
+      }
+
+      // 2) tìm reservation hiện tại
+      String? resId = slot['resId'] as String?;
+      DocumentSnapshot<Map<String, dynamic>>? resSnap;
+
+      if (resId != null && resId.isNotEmpty) {
+        final tmp = await _db.collection('reservations').doc(resId).get();
+        if (tmp.exists) {
+          resSnap = tmp;
+        }
+      }
+
+      // fallback: query theo slotId
+      if (resSnap == null) {
+        // Tìm booking đang OCCUPIED cho slotId này (không whereIn, không orderBy)
+        final qs = await _db
+            .collection('reservations')
+            .where('slotId', isEqualTo: slotId)
+            .where('status', isEqualTo: 'OCCUPIED')
+            .limit(1)
+            .get();
+        if (qs.docs.isEmpty) {
+          throw Exception('Không tìm thấy reservation hiện tại');
+        }
+        resSnap = qs.docs.first;
+        resId = resSnap.id;
+      }
+
+      final res = resSnap!.data() as Map<String, dynamic>;
+      final occupiedAtTs = res['occupiedAt'] as Timestamp?;
+      final reservedAtTs = res['reservedAt'] as Timestamp?;
+      final baseTime = (occupiedAtTs ?? reservedAtTs)?.toDate();
+      if (baseTime == null) {
+        throw Exception('Thiếu thời gian bắt đầu tính phí');
+      }
+
+      // 3) tính phút + tiền
+      final now = DateTime.now();
+      final minutes = ((now.difference(baseTime).inSeconds + 59) ~/ 60);
+      final amount = (minutes * price).clamp(0, 1 << 31);
+
+      // 4) cập nhật reservation -> RELEASED
+      await resSnap.reference.update({
+        'status': 'RELEASED',
+        'releasedAt': FieldValue.serverTimestamp(),
+        'minutes': minutes,
+        'pricePerMinute': price,
+        'amount': amount,
+      });
+
+      // 5) slot -> AVAILABLE
+      await slotRef.update({
+        'state': 'AVAILABLE',
+        'reservedBy': null,
+        'reservedAt': null,
+        'plate': null,
+      });
+
+      // 6) dọn userStates của chủ slot (nếu có)
+      final us = await _db
+          .collection('userStates')
+          .where('activeReservationId', isEqualTo: resId)
+          .limit(1)
+          .get();
+      if (us.docs.isNotEmpty) {
+        await us.docs.first.reference.update({
+          'activeSlotId': null,
+          'activeReservationId': null,
+        });
+      }
+
+      return; //  admin xong tại đây
+    }
+    // cho user có quuền trả chuồng để dễ debug
+    /*await _db.runTransaction((tx) async {
       final slotSnap = await tx.get(slotRef);
       final userSnap = await tx.get(userRef);
       final cfgSnap  = await tx.get(_cfgRef);
@@ -251,9 +344,9 @@ class SlotService {
       if (slot['state'] != 'OCCUPIED') {
         throw Exception('Chuồng chưa ở trạng thái OCCUPIED');
       }
-      if (user['activeSlotId'] != slotId) {
+      if (user['activeSlotId'] != slotId && !isAdmin) {
         // cho phép trả ngay cả khi userStates lệch? Tùy: ở đây check chặt
-        throw Exception('Trạng thái người dùng không khớp');
+        throw Exception('Trạng thái người dùng không khớp 2.1');
       }
       final resId = user['activeReservationId'] as String?;
       if (resId == null) throw Exception('Không tìm thấy reservation hiện tại');
@@ -262,6 +355,10 @@ class SlotService {
       final resRef = _db.collection('reservations').doc(resId);
       final resSnap = await tx.get(resRef);
       final res = resSnap.data() as Map<String, dynamic>?;
+      print("dong 1:::: $resRef");
+      print("dong 1:::: $resSnap");
+      print("dong 1:::: $res");
+
 
       final occupiedAt = (res?['occupiedAt'] as Timestamp?) ??
           (slot['reservedAt'] as Timestamp?); // fallback
@@ -293,7 +390,7 @@ class SlotService {
         'activeSlotId': null,
         'activeReservationId': null,
       });
-    });
+    });*/
   }
 
 }

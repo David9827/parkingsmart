@@ -7,8 +7,15 @@ import 'data/slot_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 /// ========== 1) DASHBOARD ==========
 
+const _ADMIN_UID = 'E7PxjcYkcTSC9JxPjhxDGd8zqOz2';
+
+bool get isAdmin =>
+    FirebaseAuth.instance.currentUser?.uid == _ADMIN_UID;
+
+
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
+
 
   @override
   Widget build(BuildContext context) {
@@ -418,10 +425,7 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// ========== 2) CÁC CHUỒNG XE ==========
 /// ========== 2) CÁC CHUỒNG XE (Firestore + thao tác trực tiếp) ==========
-
-
 
 class SlotsPage extends StatefulWidget {
   const SlotsPage({super.key});
@@ -431,7 +435,9 @@ class SlotsPage extends StatefulWidget {
 
 class _SlotsPageState extends State<SlotsPage> {
 
+
   Future<bool> _guardActive(String slotId) async {
+    if (isAdmin) return true;
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final st = await FirebaseFirestore.instance.collection('userStates').doc(uid).get();
@@ -727,7 +733,6 @@ class _BillingPageState extends State<BillingPage> {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: sau này thay minutes bằng (endAt - startAt) từ session Firestore
     return Padding(
       padding: const EdgeInsets.all(16),
       child: ListView(

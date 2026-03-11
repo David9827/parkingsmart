@@ -108,8 +108,9 @@ class SlotService {
       tx.update(slotRef, {
         'state': 'RESERVED',
         'reservedBy': _email,
-        'reservedAt': FieldValue.serverTimestamp(), // 👈 timer dựa vào đây
+        'reservedAt': FieldValue.serverTimestamp(), //  timer dựa vào đây
         'plate': plate,
+        'resId'      : resRef.id,
       });
 
       // cập nhật trạng thái user (để rules biết “đang giữ slot nào”)
@@ -215,7 +216,7 @@ class SlotService {
         'status': 'OCCUPIED',
         'plate': plate,
         'reservedAt': m['reservedAt'] ?? FieldValue.serverTimestamp(),
-        'occupiedAt': FieldValue.serverTimestamp(), // 👈 thời điểm bắt đầu tính tiền
+        'occupiedAt': FieldValue.serverTimestamp(), //  thời điểm bắt đầu tính tiền
       }, SetOptions(merge: true));
 
       // slot -> OCCUPIED
@@ -294,7 +295,8 @@ class SlotService {
       // 3) tính phút + tiền
       final now = DateTime.now();
       final minutes = ((now.difference(baseTime).inSeconds + 59) ~/ 60);
-      final amount = (minutes * price).clamp(0, 1 << 31);
+      final int hours = ((minutes + 59) ~/ 60); // ceil(totalMinutes / 60)
+      final amount = (hours * price).clamp(0, 1 << 31);
 
       // 4) cập nhật reservation -> RELEASED
       await resSnap.reference.update({
@@ -311,6 +313,7 @@ class SlotService {
         'reservedBy': null,
         'reservedAt': null,
         'plate': null,
+        'resId': null,
       });
 
       // 6) dọn userStates của chủ slot (nếu có)

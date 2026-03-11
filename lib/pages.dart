@@ -73,7 +73,7 @@ class DashboardPage extends StatelessWidget {
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                             isDense: true,
-                            labelText: 'VND/phút',
+                            labelText: 'VND/giờ',
                             border: OutlineInputBorder(),
                           ),
                           onSubmitted: (v) async {
@@ -88,7 +88,7 @@ class DashboardPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text('VND/phút'),
+                  const Text('VND/giờ'),
                 ],
               ),
             ),
@@ -178,8 +178,9 @@ class DashboardPage extends StatelessWidget {
                               final start = _fmtHM(occupiedAt);
                               final end   = _fmtHM(releasedAt);
                               final minutes = ((releasedAt.difference(occupiedAt).inSeconds + 59) ~/ 60);
+                              final int hours = ((minutes + 59) ~/ 60);
                               range = '$start–$end';
-                              dur = ' • $minutes phút';
+                              dur = ' • $hours giờ';
                             } else if (occupiedAt != null) {
                               range = '${_fmtHM(occupiedAt)}–…';
                             } else {
@@ -740,13 +741,13 @@ class _BillingPageState extends State<BillingPage> {
           _SectionTitle('Thông số tính tiền'),
           Row(
             children: [
-              Expanded(child: _LabeledField(label: 'Giá (đ/phút)', controller: _priceCtl)),
+              Expanded(child: _LabeledField(label: 'Giá (đ/giờ)', controller: _priceCtl)),
               const SizedBox(width: 12),
-              Expanded(child: _LabeledField(label: 'Miễn phí (phút)', controller: _freeCtl)),
+              Expanded(child: _LabeledField(label: 'Miễn phí (giờ)', controller: _freeCtl)),
             ],
           ),
           const SizedBox(height: 12),
-          _LabeledField(label: 'Số phút đỗ (ví dụ)', controller: _minutesCtl),
+          _LabeledField(label: 'Số giờ đỗ (ví dụ)', controller: _minutesCtl),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _compute,
@@ -775,7 +776,7 @@ class _BillingPageState extends State<BillingPage> {
     final amount = billable * price;
 
     setState(() {
-      _result = 'Số phút tính phí: $billable\nThành tiền: ${_formatVnd(amount)}';
+      _result = 'Số phút giờ phí: $billable\nThành tiền: ${_formatVnd(amount)}';
     });
   }
 
